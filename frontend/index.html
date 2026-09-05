@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SupportPilot AI</title>
+    <link rel="stylesheet" href="/assets/style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <p class="eyebrow">PS04 · CUSTOMER SUPPORT RESOLUTION ASSISTANT</p>
+        <h1>SupportPilot <span>AI</span></h1>
+        <p class="hero-copy">
+          Evidence-based support guidance from approved local articles.
+        </p>
+      </header>
+
+      <section class="workspace">
+        <form id="support-form" class="panel form-panel">
+          <div class="panel-heading">
+            <p class="eyebrow">SUPPORT CASE</p>
+            <h2>Analyze a customer issue</h2>
+          </div>
+
+          <label for="account-id">Account</label>
+          <select id="account-id" required>
+            <option value="">Select an account</option>
+            <option value="ACC1001">ACC1001 — Asha Rao</option>
+            <option value="ACC1002">ACC1002 — Rahul Menon</option>
+            <option value="ACC1003">ACC1003 — Priya Shah</option>
+          </select>
+
+          <label for="customer-message">Customer message</label>
+          <textarea
+            id="customer-message"
+            rows="6"
+            required
+            placeholder="Describe the customer’s issue..."
+          ></textarea>
+
+          <label for="conversation-history">Conversation history <span>(optional)</span></label>
+          <textarea
+            id="conversation-history"
+            rows="4"
+            placeholder="Add prior support notes or conversation context..."
+          ></textarea>
+
+          <button id="analyze-button" type="submit">Analyze safely</button>
+
+          <div class="demo-cases">
+            <p>Demo cases</p>
+            <button type="button" data-account="ACC1001" data-message="I paid my broadband bill yesterday but my internet is still disconnected.">
+              Normal
+            </button>
+            <button type="button" data-account="ACC1001" data-message="My internet is not working.">
+              Incomplete
+            </button>
+            <button type="button" data-account="ACC1001" data-message="I believe someone accessed my account, changed my plan, and I want compensation.">
+              Difficult
+            </button>
+          </div>
+        </form>
+
+        <section class="panel result-panel">
+          <div class="panel-heading">
+            <p class="eyebrow">RESOLUTION OUTPUT</p>
+            <h2>Support guidance</h2>
+          </div>
+
+          <div id="empty-state" class="empty-state">
+            Submit a support case to receive a safe, evidence-based response.
+          </div>
+
+          <div id="result" class="hidden">
+            <div class="result-topline">
+              <span id="status" class="status"></span>
+              <span id="confidence" class="confidence"></span>
+            </div>
+
+            <section>
+              <h3>Issue category</h3>
+              <p id="issue-category"></p>
+            </section>
+
+            <section>
+              <h3>Summary</h3>
+              <p id="summary"></p>
+            </section>
+
+            <section>
+              <h3>Recommended resolution</h3>
+              <ul id="recommended-resolution"></ul>
+            </section>
+
+            <section>
+              <h3>Evidence</h3>
+              <div id="evidence"></div>
+            </section>
+
+            <section id="missing-section">
+              <h3>Missing information</h3>
+              <ul id="missing-information"></ul>
+            </section>
+
+            <section id="escalation-section">
+              <h3>Escalation</h3>
+              <p id="escalation"></p>
+            </section>
+
+            <section id="handoff-section">
+              <h3>Handoff summary</h3>
+              <div id="handoff-summary"></div>
+            </section>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="/assets/script.js"></script>
+  </body>
+</html>

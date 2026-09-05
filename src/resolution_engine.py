@@ -5,8 +5,12 @@ from typing import Any
 
 from src.document_service import retrieve_relevant_articles
 from src.gemini_service import GeminiService
-from src.models import EvidenceItem, HandoffSummary, ResolutionResponse
-
+from src.models import (
+    ESCALATE_TO_HUMAN,
+    MORE_INFORMATION_REQUIRED,
+    READY_FOR_AGENT,
+    build_response,
+)
 
 HIGH_RISK_PATTERNS = (
     r"\bfraud\b",
@@ -21,7 +25,16 @@ HIGH_RISK_PATTERNS = (
     r"\bcompensation\b",
 )
 
-CONNECTIVITY_TERMS = ("internet", "wifi", "broadband", "router", "connection", "offline")
+CONNECTIVITY_TERMS = (
+    "internet",
+    "wifi",
+    "broadband",
+    "router",
+    "connection",
+    "offline",
+    "disconnected",
+)
+
 CONNECTIVITY_DETAIL_TERMS = (
     "paid",
     "payment",
@@ -36,138 +49,226 @@ CONNECTIVITY_DETAIL_TERMS = (
 
 
 def _contains_high_risk_request(message: str) -> bool:
-    return any(re.search(pattern, message, flags=re.IGNORECASE) for pattern in HIGH_RISK_PATTERNS)
+    return any(
+        re.search(pattern, message, flags=re.IGNORECASE)
+        for pattern in HIGH_RISK_PATTERNS
+    )
 
 
 def _is_incomplete_connectivity_request(message: str) -> bool:
     normalized = message.lower()
-    has_connectivity_topic = any(term in normalized for term in CONNECTIVITY_TERMS)
-    has_specific_detail = any(term in normalized for term in CONNECTIVITY_DETAIL_TERMS)
+
+    has_connectivity_topic = any(
+        term in normalized for term in CONNECTIVITY_TERMS
+    )
+
+    has_specific_detail = any(
+        term in normalized for term in CONNECTIVITY_DETAIL_TERMS
+    )
+
     return has_connectivity_topic and not has_specific_detail
 
 
 def _category(message: str) -> str:
     normalized = message.lower()
+
     if _contains_high_risk_request(message):
         return "Safety escalation"
+
     if any(term in normalized for term in ("payment", "paid", "bill", "invoice")):
         return "Billing and payment"
+
     if any(term in normalized for term in ("plan", "upgrade", "downgrade", "cancel")):
         return "Plan management"
+
     if any(term in normalized for term in ("password", "login", "otp", "locked", "access")):
         return "Account access"
+
     if any(term in normalized for term in CONNECTIVITY_TERMS):
         return "Connectivity"
+
     return "General support"
 
 
-def _evidence(articles: list[dict[str, Any]]) -> list[EvidenceItem]:
+def _evidence(articles: list[dict[str, Any]]) -> list[dict[str, str]]:
     return [
-        EvidenceItem(
-            article_id=article["id"],
-            title=article["title"],
-            section="content",
-        )
+        {
+            "article_id": article["id"],
+            "title": article["title"],
+            "section": "content",
+        }
         for article in articles
     ]
 
 
-def _account_facts(account_snapshot: dict[str, Any]) -> list[str]:
-    fields = ("id", "plan", "billing", "restriction", "known_outage", "verification")
-    return [f"{field}: {account_snapshot[field]}" for field in fields if field in account_snapshot]
+def _account_facts(account: dict[str, Any]) -> list[str]:
+    fields = (
+        "id",
+        "plan",
+        "billing",
+        "restriction",
+        "known_outage",
+        "verification",
+    )
+
+    return [
+        f"{field}: {account[field]}"
+        for field in fields
+        if field in account
+    ]
 
 
 def _safe_fallback(
     category: str,
-    account_snapshot: dict[str, Any],
+    account: dict[str, Any],
     articles: list[dict[str, Any]],
-) -> ResolutionResponse:
+) -> dict[str, Any]:
     recommendations = [
-        f"Follow the verified local guidance in {article['id']}: {article['content']}"
+        f"Follow the verified local guidance in {article['id']}: "
+        f"{article['content']}"
         for article in articles
     ]
-    return ResolutionResponse(
+
+    return build_response(
         issue_category=category,
         summary="Relevant local support guidance was found for this customer message.",
         recommended_resolution=recommendations,
         evidence=_evidence(articles),
         missing_information=[],
         confidence="medium",
-        status="READY_FOR_AGENT",
+        status=READY_FOR_AGENT,
         escalation_required=False,
         escalation_reason="",
-        handoff_summary=HandoffSummary(
-            issue=category,
-            established_facts=_account_facts(account_snapshot),
-            steps_already_tried=[],
-            human_action_needed="",
-        ),
+        handoff_summary={
+            "issue": category,
+            "established_facts": _account_facts(account),
+            "steps_already_tried": [],
+            "human_action_needed": "",
+        },
     )
 
 
-def _validated_gemini_response(
-    response: ResolutionResponse | None,
+def _validate_gemini_response(
+    response: dict[str, Any] | None,
     retrieved_articles: list[dict[str, Any]],
-) -> ResolutionResponse | None:
-    if response is None:
+) -> dict[str, Any] | None:
+
+    if not isinstance(response, dict):
         return None
 
-    retrieved_by_id = {article["id"]: article for article in retrieved_articles}
-    if not response.evidence:
+    required_fields = (
+        "issue_category",
+        "summary",
+        "recommended_resolution",
+        "evidence",
+        "missing_information",
+        "confidence",
+        "status",
+        "escalation_required",
+        "escalation_reason",
+        "handoff_summary",
+    )
+
+    if any(field not in response for field in required_fields):
         return None
 
-    for item in response.evidence:
-        article = retrieved_by_id.get(item.article_id)
-        if article is None or item.title != article["title"]:
+    if response["status"] not in {
+        READY_FOR_AGENT,
+        MORE_INFORMATION_REQUIRED,
+        ESCALATE_TO_HUMAN,
+    }:
+        return None
+
+    retrieved_by_id = {
+        article["id"]: article
+        for article in retrieved_articles
+    }
+
+    for item in response["evidence"]:
+        article = retrieved_by_id.get(item.get("article_id"))
+
+        if article is None:
+            return None
+
+        if item.get("title") != article["title"]:
             return None
 
     return response
 
 
-def analyze_support_case(
-    *,
-    customer_message: str,
-    conversation_history: list[dict[str, str]] | None,
-    account_snapshot: dict[str, Any] | None,
-    gemini_service: GeminiService | None = None,
-) -> ResolutionResponse:
-    """Produce a safe structured response from local evidence and optional Gemini."""
-    message = customer_message.strip()
-    history = conversation_history or []
-    account = account_snapshot or {}
+def analyze_case(payload: dict[str, Any]) -> dict[str, Any]:
+    """Analyze a customer support case safely."""
 
-    if not message:
-        return ResolutionResponse(
+    customer_message = str(
+        payload.get("customer_message", "")
+    ).strip()
+
+    account_id = str(
+        payload.get("account_id", "")
+    ).strip()
+
+    conversation_history = payload.get(
+        "conversation_history",
+        [],
+    )
+
+    if not customer_message:
+        return build_response(
             issue_category="Unknown",
             summary="A customer message is required before the issue can be assessed.",
             recommended_resolution=[],
             evidence=[],
             missing_information=["Customer issue description"],
             confidence="low",
-            status="MORE_INFORMATION_REQUIRED",
+            status=MORE_INFORMATION_REQUIRED,
             escalation_required=False,
             escalation_reason="",
         )
+
+    accounts_path = (
+        __import__("pathlib").Path(__file__).resolve().parent.parent
+        / "data"
+        / "sample_accounts.json"
+    )
+
+    import json
+
+    with accounts_path.open("r", encoding="utf-8") as file:
+        accounts = json.load(file)
+
+    account = next(
+        (
+            item
+            for item in accounts
+            if item.get("id") == account_id
+        ),
+        None,
+    )
 
     if not account:
-        return ResolutionResponse(
+        return build_response(
             issue_category="Unknown",
-            summary="An account snapshot is required for account-specific support guidance.",
+            summary="A valid account is required for account-specific support guidance.",
             recommended_resolution=[],
             evidence=[],
-            missing_information=["Verified account snapshot"],
+            missing_information=["Verified account ID"],
             confidence="low",
-            status="MORE_INFORMATION_REQUIRED",
+            status=MORE_INFORMATION_REQUIRED,
             escalation_required=False,
             escalation_reason="",
         )
 
-    articles = retrieve_relevant_articles(message)
-    category = _category(message)
+    articles = retrieve_relevant_articles(customer_message)
+    category = _category(customer_message)
 
-    if _contains_high_risk_request(message):
-        escalation_articles = [article for article in articles if article["id"] == "ART-ESC-001"]
-        return ResolutionResponse(
+    if _contains_high_risk_request(customer_message):
+        escalation_articles = [
+            article
+            for article in articles
+            if article["id"] == "ART-ESC-001"
+        ]
+
+        return build_response(
             issue_category="Safety escalation",
             summary="This request contains a sensitive issue that requires human review.",
             recommended_resolution=[
@@ -177,38 +278,38 @@ def analyze_support_case(
             evidence=_evidence(escalation_articles),
             missing_information=[],
             confidence="high",
-            status="ESCALATE_TO_HUMAN",
+            status=ESCALATE_TO_HUMAN,
             escalation_required=True,
             escalation_reason="Sensitive or high-risk issue requiring human review.",
-            handoff_summary=HandoffSummary(
-                issue=message,
-                established_facts=_account_facts(account),
-                steps_already_tried=[],
-                human_action_needed="Review the sensitive request and decide the appropriate next action.",
-            ),
+            handoff_summary={
+                "issue": customer_message,
+                "established_facts": _account_facts(account),
+                "steps_already_tried": [],
+                "human_action_needed": "Review the sensitive request and decide the appropriate next action.",
+            },
         )
 
     if not articles:
-        return ResolutionResponse(
+        return build_response(
             issue_category=category,
             summary="No verified local article matches this customer issue.",
             recommended_resolution=[],
             evidence=[],
             missing_information=[],
             confidence="low",
-            status="ESCALATE_TO_HUMAN",
+            status=ESCALATE_TO_HUMAN,
             escalation_required=True,
             escalation_reason="Unsupported issue with no verified local guidance.",
-            handoff_summary=HandoffSummary(
-                issue=message,
-                established_facts=_account_facts(account),
-                steps_already_tried=[],
-                human_action_needed="Review the unsupported issue and provide verified guidance.",
-            ),
+            handoff_summary={
+                "issue": customer_message,
+                "established_facts": _account_facts(account),
+                "steps_already_tried": [],
+                "human_action_needed": "Review the unsupported issue and provide verified guidance.",
+            },
         )
 
-    if _is_incomplete_connectivity_request(message):
-        return ResolutionResponse(
+    if _is_incomplete_connectivity_request(customer_message):
+        return build_response(
             issue_category="Connectivity",
             summary="More troubleshooting detail is needed before a safe resolution can be recommended.",
             recommended_resolution=[
@@ -225,16 +326,16 @@ def analyze_support_case(
                 "Whether one or multiple devices are affected",
             ],
             confidence="medium",
-            status="MORE_INFORMATION_REQUIRED",
+            status=MORE_INFORMATION_REQUIRED,
             escalation_required=False,
             escalation_reason="",
         )
 
     if (
-        any(term in message.lower() for term in CONNECTIVITY_TERMS)
+        any(term in customer_message.lower() for term in CONNECTIVITY_TERMS)
         and account.get("known_outage") == "local outage reported"
     ):
-        return ResolutionResponse(
+        return build_response(
             issue_category="Connectivity",
             summary="The supplied account snapshot reports a local outage for this connectivity issue.",
             recommended_resolution=[
@@ -244,24 +345,35 @@ def analyze_support_case(
             evidence=_evidence(articles),
             missing_information=[],
             confidence="high",
-            status="ESCALATE_TO_HUMAN",
+            status=ESCALATE_TO_HUMAN,
             escalation_required=True,
             escalation_reason="Local outage reported in the supplied account snapshot.",
-            handoff_summary=HandoffSummary(
-                issue=message,
-                established_facts=_account_facts(account),
-                steps_already_tried=[],
-                human_action_needed="Confirm outage handling and provide verified customer communication.",
-            ),
+            handoff_summary={
+                "issue": customer_message,
+                "established_facts": _account_facts(account),
+                "steps_already_tried": [],
+                "human_action_needed": "Confirm outage handling and provide verified customer communication.",
+            },
         )
 
-    service = gemini_service or GeminiService()
+    service = GeminiService()
+
     gemini_response = service.generate_resolution(
-        customer_message=message,
-        conversation_history=history,
+        customer_message=customer_message,
+        conversation_history=conversation_history
+        if isinstance(conversation_history, list)
+        else [],
         account_snapshot=account,
         articles=articles,
     )
-    validated_response = _validated_gemini_response(gemini_response, articles)
 
-    return validated_response or _safe_fallback(category, account, articles)
+    validated_response = _validate_gemini_response(
+        gemini_response,
+        articles,
+    )
+
+    return validated_response or _safe_fallback(
+        category,
+        account,
+        articles,
+    )
