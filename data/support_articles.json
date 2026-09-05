@@ -1,0 +1,38 @@
+[
+  {
+    "id": "ART-BIL-001",
+    "title": "Payment pending or not reflected",
+    "keywords": ["payment", "paid", "bill", "pending", "disconnected", "invoice"],
+    "content": "Payment may take up to 24 hours to reflect. Verify payment reference, payment date, amount, and account ID. Do not promise reconnection until payment is confirmed. If payment remains pending for more than 24 hours, escalate to billing."
+  },
+  {
+    "id": "ART-CON-001",
+    "title": "Internet not working: basic checks",
+    "keywords": ["internet", "wifi", "broadband", "router", "connection", "offline", "red light"],
+    "content": "Confirm router power, restart the router for 30 seconds, check router lights, and test one device by cable if possible. Check whether there is a known outage. Escalate if there is a local outage or physical line fault."
+  },
+  {
+    "id": "ART-CON-002",
+    "title": "Paid but service remains disconnected",
+    "keywords": ["paid", "payment", "disconnected", "service", "internet", "reconnect"],
+    "content": "When payment is confirmed and there is no restriction or outage, restart the router and check the router light. If service remains unavailable after 30 minutes, create a technician visit request. Do not schedule a technician if payment has not been confirmed."
+  },
+  {
+    "id": "ART-PLAN-001",
+    "title": "Plan upgrade/downgrade/cancellation",
+    "keywords": ["plan", "upgrade", "downgrade", "cancel", "data", "speed", "recharge"],
+    "content": "Confirm the current plan and requested plan, eligibility, and effective date. Downgrades take effect in the next billing cycle. Cancellation requires verification and explicit confirmation. Escalate unusual pricing disputes."
+  },
+  {
+    "id": "ART-ACC-001",
+    "title": "Account access/password reset",
+    "keywords": ["login", "password", "account", "access", "otp", "locked"],
+    "content": "Verify the account ID and approved verification before providing account information. Offer password reset only after verification. Escalate repeated failed verification or suspected unauthorized access."
+  },
+  {
+    "id": "ART-ESC-001",
+    "title": "Human escalation",
+    "keywords": ["legal", "complaint", "fraud", "threat", "emergency", "data breach", "unknown", "compensation"],
+    "content": "Escalate fraud, legal issues, privacy/data breaches, threats, emergencies, compensation requests, and unsupported issues. Provide a concise handoff summary and do not invent a resolution."
+  }
+]

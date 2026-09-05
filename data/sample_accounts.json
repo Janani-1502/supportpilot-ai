@@ -1,0 +1,32 @@
+[
+  {
+    "id": "ACC1001",
+    "name": "Asha Rao",
+    "plan": "Fibre Plus 100 Mbps",
+    "billing": "paid yesterday/payment confirmed",
+    "restriction": false,
+    "known_outage": "no",
+    "previous_tickets": "router replacement ticket closed last month",
+    "verification": "verified"
+  },
+  {
+    "id": "ACC1002",
+    "name": "Rahul Menon",
+    "plan": "Mobile Basic",
+    "billing": "payment pending",
+    "restriction": true,
+    "known_outage": "not applicable",
+    "previous_tickets": "none",
+    "verification": "verified"
+  },
+  {
+    "id": "ACC1003",
+    "name": "Priya Shah",
+    "plan": "Fibre Standard",
+    "billing": "paid/current",
+    "restriction": false,
+    "known_outage": "local outage reported",
+    "previous_tickets": "two connectivity tickets last week",
+    "verification": "verified"
+  }
+]
